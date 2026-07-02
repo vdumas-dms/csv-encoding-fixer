@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSV Encoding Fixer — YouSchool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
+
+  header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%);
+    color: white; padding: 24px 40px; display: flex; align-items: center; gap: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  }
+  header .logo {
+    width: 40px; height: 40px; background: linear-gradient(135deg, #e94560, #f5a623);
+    border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 800;
+  }
+  header h1 { font-size: 1.4rem; font-weight: 700; }
+  header p { font-size: 0.8rem; opacity: 0.6; margin-top: 2px; }
+  main { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+
+  .dropzone {
+    border: 2.5px dashed #c0c8d8; border-radius: 16px; background: white;
+    padding: 56px 32px; text-align: center; cursor: pointer; transition: all 0.2s; position: relative;
+  }
+  .dropzone:hover, .dropzone.dragging { border-color: #0f3460; background: #f0f4ff; }
+  .dropzone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .dropzone .icon { font-size: 48px; margin-bottom: 12px; }
+  .dropzone h2 { font-size: 1.2rem; color: #1a1a2e; margin-bottom: 6px; }
+  .dropzone p { color: #666; font-size: 0.9rem; }
+  .dropzone .hint { margin-top: 16px; display: inline-block; background: #f0f4ff; color: #0f3460; padding: 6px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; margin: 20px 0; align-items: center; }
+  .control-group { background: white; border-radius: 10px; padding: 10px 16px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); font-size: 0.85rem; }
+  .control-group label { font-weight: 600; color: #444; }
+  .control-group select { border: 1.5px solid #dde3ee; border-radius: 6px; padding: 4px 10px; font-size: 0.85rem; color: #1a1a2e; background: #f8fafc; cursor: pointer; }
+
+  .stats-bar { display: flex; gap: 12px; flex-wrap: wrap; margin: 0 0 20px; }
+  .stat { background: white; border-radius: 10px; padding: 12px 20px; flex: 1; min-width: 130px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); text-align: center; }
+  .stat .val { font-size: 1.4rem; font-weight: 800; color: #0f3460; }
+  .stat .lbl { font-size: 0.72rem; color: #888; margin-top: 2px; }
+  .stat.green .val { color: #16a34a; }
+  .stat.orange .val { color: #ea580c; }
+  .stat.purple .val { color: #7c3aed; }
+  .stat.blue .val { color: #0891b2; }
+
+  /* Légende types */
+  .type-legend { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; align-items: center; }
+  .type-legend span { font-size: 0.75rem; color: #666; }
+  .type-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; }
+  .pill-date  { background: #fef3c7; color: #92400e; }
+  .pill-num   { background: #dbeafe; color: #1e40af; }
+  .pill-bool  { background: #f3e8ff; color: #6b21a8; }
+  .pill-phone { background: #dcfce7; color: #15803d; }
+  .pill-datetime { background: #fce7f3; color: #9d174d; }
+
+  .table-wrap { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
+  .table-header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f0f2f5; }
+  .table-header h3 { font-size: 1rem; color: #1a1a2e; }
+  .badge { background: #f0f4ff; color: #0f3460; border-radius: 20px; padding: 3px 12px; font-size: 0.75rem; font-weight: 600; }
+  .table-scroll { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  thead { position: sticky; top: 0; z-index: 1; }
+  thead th { background: #1a1a2e; color: white; padding: 8px 14px; text-align: left; font-weight: 600; white-space: nowrap; }
+  thead th .th-inner { display: flex; flex-direction: column; gap: 3px; }
+  thead th .th-name { white-space: nowrap; }
+  tbody tr:nth-child(even) { background: #f8fafc; }
+  tbody tr:hover { background: #f0f4ff; }
+  tbody td { padding: 7px 14px; border-bottom: 1px solid #f0f2f5; color: #333; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.fixed { color: #16a34a; font-weight: 600; }
+  td.type-date { color: #92400e; }
+  td.type-num  { color: #1e40af; text-align: right; }
+  td.type-bool { color: #6b21a8; text-align: center; }
+  td.type-datetime { color: #9d174d; }
+  .orig { color: #ef4444; text-decoration: line-through; font-size: 0.73rem; display: block; opacity: 0.7; }
+
+  .actions { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
+  button { padding: 12px 24px; border: none; border-radius: 10px; font-size: 0.88rem; font-weight: 700; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 8px; }
+  .btn-primary { background: linear-gradient(135deg, #0f3460, #1a5276); color: white; box-shadow: 0 4px 12px rgba(15,52,96,0.3); }
+  .btn-primary:hover { transform: translateY(-1px); }
+  .btn-secondary { background: white; color: #0f3460; border: 2px solid #dde3ee; }
+  .btn-secondary:hover { border-color: #0f3460; }
+  .btn-success { background: linear-gradient(135deg, #16a34a, #15803d); color: white; box-shadow: 0 4px 12px rgba(22,163,74,0.3); }
+  .btn-success:hover { transform: translateY(-1px); }
+
+  .alert { border-radius: 10px; padding: 12px 16px; margin: 12px 0; font-size: 0.85rem; display: flex; align-items: flex-start; gap: 10px; }
+  .alert-info    { background: #eff6ff; color: #1e40af; border-left: 4px solid #3b82f6; }
+  .alert-success { background: #f0fdf4; color: #14532d; border-left: 4px solid #22c55e; }
+
+  .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; color: #444; cursor: pointer; user-select: none; }
+  .toggle { width: 36px; height: 20px; background: #dde3ee; border-radius: 20px; position: relative; transition: background 0.2s; flex-shrink: 0; }
+  .toggle.on { background: #0f3460; }
+  .toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  .toggle.on::after { left: 18px; }
+
+  .hidden { display: none !important; }
+  footer { text-align: center; padding: 24px; color: #aaa; font-size: 0.75rem; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Y</div>
+  <div>
+    <h1>CSV Encoding Fixer</h1>
+    <p>Correction d'encodage + préservation automatique des types (dates, nombres, booléens)</p>
+  </div>
+</header>
+
+<main>
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" accept=".csv,.txt">
+    <div class="icon">📂</div>
+    <h2>Glissez-déposez votre fichier CSV ici</h2>
+    <p>ou cliquez pour parcourir vos fichiers</p>
+    <span class="hint">Formats supportés : .csv · .txt</span>
+  </div>
+
+  <div id="resultsSection" class="hidden">
+
+    <div class="alert alert-info" id="detectionAlert" style="margin-top:20px;">
+      <span>🔍</span><span id="detectionMsg">Analyse en cours...</span>
+    </div>
+
+    <div class="controls">
+      <div class="control-group">
+        <label>Encodage :</label>
+        <select id="encodingSelect">
+          <option value="auto">Auto-détection</option>
+          <option value="windows-1252">Windows-1252 (Excel FR)</option>
+          <option value="iso-8859-1">ISO-8859-1 (Latin-1)</option>
+          <option value="utf-8">UTF-8</option>
+          <option value="utf-8-bom">UTF-8 avec BOM</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Séparateur :</label>
+        <select id="separatorSelect">
+          <option value="auto">Auto</option>
+          <option value=";">Point-virgule (;)</option>
+          <option value=",">Virgule (,)</option>
+          <option value="	">Tabulation</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Format date :</label>
+        <select id="dateFormatSelect">
+          <option value="auto">Auto</option>
+          <option value="dmy">JJ/MM/AAAA (FR)</option>
+          <option value="mdy">MM/JJ/AAAA (US)</option>
+          <option value="ymd">AAAA-MM-JJ (ISO)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label class="toggle-row" onclick="toggleFix()">
+          <div class="toggle on" id="fixToggle"></div>
+          Correction encodage
+        </label>
+      </div>
+      <button class="btn-secondary" onclick="reprocess()" style="margin-left:auto;">🔄 Retraiter</button>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat"><div class="val" id="statRows">—</div><div class="lbl">Lignes</div></div>
+      <div class="stat"><div class="val" id="statCols">—</div><div class="lbl">Colonnes</div></div>
+      <div class="stat green"><div class="val" id="statFixed">—</div><div class="lbl">Corrections encodage</div></div>
+      <div class="stat orange"><div class="val" id="statDates">—</div><div class="lbl">Colonnes dates</div></div>
+      <div class="stat blue"><div class="val" id="statNums">—</div><div class="lbl">Colonnes numériques</div></div>
+      <div class="stat purple"><div class="val" id="statEncoding">—</div><div class="lbl">Encodage source</div></div>
+    </div>
+
+    <div class="type-legend">
+      <span>Types détectés :</span>
+      <span class="type-pill pill-date">📅 Date</span>
+      <span class="type-pill pill-datetime">🕐 Date+Heure</span>
+      <span class="type-pill pill-num">🔢 Nombre</span>
+      <span class="type-pill pill-bool">✅ Booléen</span>
+      <span class="type-pill pill-text">📝 Texte</span>
+      <span class="type-pill pill-phone">📞 Téléphone / ID</span>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-header">
+        <h3>📋 Aperçu des données corrigées</h3>
+        <span class="badge" id="previewBadge">50 premières lignes</span>
+      </div>
+      <div class="table-scroll">
+        <table id="previewTable"></table>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-success" onclick="exportXLSX()">⬇️ Télécharger .xlsx (types préservés)</button>
+      <button class="btn-secondary" onclick="exportCSV()">📄 Exporter CSV corrigé (UTF-8)</button>
+      <button class="btn-secondary" onclick="resetApp()">🗑️ Charger un autre fichier</button>
+    </div>
+
+  </div>
+</main>
+<footer>CSV Encoding Fixer · Usage interne YouSchool · Traitement 100% local — aucune donnée envoyée sur internet</footer>
+
+<script>
+// ════════════════════════════════════════════════
+// TABLE DE CORRECTION D'ENCODAGE
+// ════════════════════════════════════════════════
+const ENCODING_MAP = [
+  ['Ã©','é'],['Ã¨','è'],['Ãª','ê'],['Ã«','ë'],
+  ['Ã ','à'],['Ã¢','â'],['Ã¤','ä'],
+  ['Ã®','î'],['Ã¯','ï'],
+  ['Ã´','ô'],['Ã¶','ö'],
+  ['Ã¹','ù'],['Ã»','û'],['Ã¼','ü'],
+  ['Ã§','ç'],['Å\u009c','œ'],['Ã¦','æ'],
+  ['Ã‰','É'],['Ã‡','Ç'],['Ãˆ','È'],['ÃŠ','Ê'],
+  ['Ã€','À'],['Ã‚','Â'],['Ã"','Ô'],['Å\u008c','Œ'],
+  ['â€™',"'"],['â€˜',"'"],['â€œ','"'],['â€\u009d','"'],
+  ['â€"','–'],['â€"','—'],['â€¦','…'],
+  ['Â«','«'],['Â»','»'],['Â°','°'],
+  ['â‚¬','€'],['Â£','£'],['\uFEFF',''],['Â ',' '],
+];
+const DOUBLE_ENC_MAP = [
+  ['Ã\u00a9','é'],['Ã\u00a8','è'],['Ã\u00aa','ê'],
+  ['Ã\u00a0','à'],['Ã\u00a2','â'],['Ã\u00ae','î'],
+  ['Ã\u00b4','ô'],['Ã\u00b9','ù'],['Ã\u00bb','û'],
+  ['Ã\u00bc','ü'],['Ã\u00a7','ç'],
+];
+
+function fixEncoding(str) {
+  if (!str || typeof str !== 'string') return { val: str, fixed: false };
+  let out = str;
+  for (const [b, g] of ENCODING_MAP) out = out.split(b).join(g);
+  for (const [b, g] of DOUBLE_ENC_MAP) out = out.split(b).join(g);
+  return { val: out, fixed: out !== str };
+}
+
+// ════════════════════════════════════════════════
+// DÉTECTION ET PARSING DES TYPES
+// ════════════════════════════════════════════════
+
+// Formats date à tester (ordre = priorité)
+const DATE_PATTERNS = [
+  // datetime
+  { re: /^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/, parse: (m,pref) => buildDate(pref,m), type:'datetime' },
+  { re: /^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/, parse: (m) => buildDateISO(m), type:'datetime' },
+  // date only
+  { re: /^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/, parse: (m,pref) => buildDate(pref,m), type:'date' },
+  { re: /^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/, parse: (m) => buildDateISO(m), type:'date' },
+  { re: /^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})$/, parse: (m,pref) => buildDate2Y(pref,m), type:'date' },
+];
+
+function buildDate(pref, m) {
+  // pref: 'dmy'|'mdy'|'ymd'|'auto'
+  let d, mo, y;
+  if (pref === 'mdy') { mo = +m[1]; d = +m[2]; y = +m[3]; }
+  else { d = +m[1]; mo = +m[2]; y = +m[3]; } // dmy (default FR)
+  if (mo > 12) { [d, mo] = [mo, d]; } // swap if month > 12
+  if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+  const dt = m[4] ? new Date(y, mo-1, d, +m[4], +m[5], +(m[6]||0)) : new Date(y, mo-1, d);
+  return isNaN(dt) ? null : dt;
+}
+function buildDate2Y(pref, m) {
+  const y2 = +m[3]; const full = y2 >= 0 && y2 <= 30 ? 2000+y2 : 1900+y2;
+  return buildDate(pref, [m[0],m[1],m[2],String(full),...m.slice(4)]);
+}
+function buildDateISO(m) {
+  const [,y,mo,d] = m;
+  const dt = m[4] ? new Date(+y,+mo-1,+d,+m[4],+m[5],+(m[6]||0)) : new Date(+y,+mo-1,+d);
+  return isNaN(dt) ? null : dt;
+}
+
+// ─── Détection des chaînes à préserver comme TEXTE ───────────────────────────
+// Retourne true si la valeur doit rester texte quoi qu'il arrive
+function isTextOnly(s) {
+  const t = s.trim();
+  // Numéro de téléphone : commence par +, 00, ou 0 suivi de ≥ 8 chiffres
+  if (/^\+\d{6,}$/.test(t))         return true;  // +33612345678, +594694432888
+  if (/^00\d{7,}$/.test(t))          return true;  // 0033612345678
+  if (/^0\d{8,}$/.test(t))           return true;  // 0612345678 (FR mobile/fixe)
+  // Codes postaux, numéros avec zéro initial significatif (ex: 01234)
+  if (/^0\d{4,}$/.test(t))           return true;
+  // Identifiants longs purement numériques (>= 10 chiffres) → SIRET, NIR, codes métier…
+  if (/^\d{10,}$/.test(t))           return true;
+  // Contient un mélange chiffres + tirets/points de style téléphone → 06-12-34-56-78
+  if (/^[\d\s\-\.]{9,}$/.test(t) && /\d{2}[\s\-\.]\d{2}/.test(t)) return true;
+  return false;
+}
+
+// Nombres : français (1 234,56) ou anglais (1,234.56) ou simple (1234.56 / 1234,56)
+function parseNumber(s) {
+  if (s === '' || s == null) return null;
+  const t = s.trim();
+  if (t === '') return null;
+  // Protéger les chaînes qui doivent rester texte
+  if (isTextOnly(t)) return null;
+  // Déjà un nombre JS
+  if (!isNaN(t) && t !== '') return +t;
+  // FR: espace/point comme séparateur milliers + virgule décimale → "1 234,56" ou "1.234,56"
+  const fr = t.replace(/\s/g,'').replace(/\.(\d{3})/g,'$1').replace(',','.');
+  if (!isNaN(fr) && fr !== '') return +fr;
+  // EN: virgule milliers + point décimale → "1,234.56"
+  const en = t.replace(/,(\d{3})/g,'$1');
+  if (!isNaN(en) && en !== '') return +en;
+  return null;
+}
+
+const BOOL_TRUE  = new Set(['true','vrai','oui','yes','1','x','✓','✔']);
+const BOOL_FALSE = new Set(['false','faux','non','no','0','']);
+
+function tryBool(s) {
+  const t = s.trim().toLowerCase();
+  if (BOOL_TRUE.has(t))  return true;
+  if (BOOL_FALSE.has(t)) return false;
+  return null;
+}
+
+function inferCellType(raw, datePref) {
+  if (raw === null || raw === undefined || raw.trim() === '')
+    return { type: 'empty', val: '' };
+
+  // Protéger en priorité les identifiants texte (téléphones, codes, SIRET…)
+  if (isTextOnly(raw.trim())) return { type: 'text', val: raw, display: raw };
+
+  // Booléen explicite (true/false/oui/non seulement — pas '1'/'0' seul car ambigu avec nombre)
+  const boolWords = new Set(['true','false','vrai','faux','oui','non','yes','no']);
+  if (boolWords.has(raw.trim().toLowerCase())) {
+    const b = tryBool(raw);
+    if (b !== null) return { type: 'bool', val: b, display: b ? 'VRAI' : 'FAUX' };
+  }
+
+  // Date / datetime
+  for (const pat of DATE_PATTERNS) {
+    const m = raw.trim().match(pat.re);
+    if (m) {
+      const dt = pat.parse(m, datePref);
+      if (dt) return { type: pat.type, val: dt, display: formatDateDisplay(dt, pat.type) };
+    }
+  }
+
+  // Nombre
+  const n = parseNumber(raw);
+  if (n !== null) return { type: 'number', val: n, display: raw.trim() };
+
+  // Texte
+  return { type: 'text', val: raw, display: raw };
+}
+
+function formatDateDisplay(dt, type) {
+  if (type === 'datetime') {
+    return dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
+  }
+  return dt.toLocaleDateString('fr-FR');
+}
+
+// Inférer le type dominant d'une colonne (sur max 200 lignes)
+function inferColumnType(values, datePref) {
+  const counts = { date:0, datetime:0, number:0, bool:0, text:0, empty:0, phone:0 };
+  const sample = values.slice(0, 200);
+  for (const v of sample) {
+    if (v && isTextOnly(v.trim())) { counts.phone++; continue; }
+    const { type } = inferCellType(v, datePref);
+    counts[type] = (counts[type]||0) + 1;
+  }
+  const nonEmpty = sample.length - counts.empty;
+  if (nonEmpty === 0) return 'text';
+  // Colonne téléphone/identifiant si ≥ 60% des valeurs sont de ce type
+  if ((counts.phone||0) / nonEmpty >= 0.60) return 'phone';
+  // Seuil 80% pour les autres types
+  for (const t of ['datetime','date','number','bool']) {
+    if ((counts[t]||0) / nonEmpty >= 0.80) return t;
+  }
+  return 'text';
+}
+
+// ════════════════════════════════════════════════
+// ÉTAT GLOBAL
+// ════════════════════════════════════════════════
+let rawText = '';
+let fileName = '';
+let processedData = [];  // [{colName: {orig, val, fixed, typedVal, type, display}}]
+let headers = [];
+let colTypes = {};       // {colName: 'date'|'number'|'text'|...}
+let fixEnabled = true;
+let fixCount = 0;
+let detectedEncoding = 'inconnu';
+let rawBytes = null;
+
+// ════════════════════════════════════════════════
+// DRAG & DROP + FILE INPUT
+// ════════════════════════════════════════════════
+const dz = document.getElementById('dropzone');
+const fi = document.getElementById('fileInput');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragging'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragging'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragging'); const f=e.dataTransfer.files[0]; if(f) loadFile(f); });
+fi.addEventListener('change', e => { if(e.target.files[0]) loadFile(e.target.files[0]); });
+
+function loadFile(file) {
+  fileName = file.name;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    rawBytes = new Uint8Array(e.target.result);
+    detectedEncoding = detectEncoding(rawBytes);
+    document.getElementById('encodingSelect').value =
+      detectedEncoding.includes('BOM') ? 'utf-8-bom' :
+      detectedEncoding.includes('UTF-8') ? 'utf-8' :
+      detectedEncoding.includes('Windows') ? 'windows-1252' :
+      detectedEncoding.includes('Latin') ? 'iso-8859-1' : 'auto';
+    decodeAndProcess();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function detectEncoding(bytes) {
+  if (bytes[0]===0xEF && bytes[1]===0xBB && bytes[2]===0xBF) return 'UTF-8 avec BOM';
+  if (bytes[0]===0xFF && bytes[1]===0xFE) return 'UTF-16 LE';
+  if (bytes[0]===0xFE && bytes[1]===0xFF) return 'UTF-16 BE';
+  let hasHigh=false, hasUtf8=false;
+  for (let i=0; i<Math.min(bytes.length,5000); i++) {
+    if (bytes[i]>127) {
+      hasHigh=true;
+      if (bytes[i]>=0xC2 && bytes[i]<=0xEF && (bytes[i+1]&0xC0)===0x80) hasUtf8=true;
+    }
+  }
+  if (!hasHigh) return 'UTF-8 (ASCII pur)';
+  return hasUtf8 ? 'UTF-8' : 'Windows-1252 / Latin-1';
+}
+
+function decodeAndProcess() {
+  const sel = document.getElementById('encodingSelect').value;
+  const charset = sel==='windows-1252' ? 'windows-1252' : sel==='iso-8859-1' ? 'iso-8859-1' : 'utf-8';
+  try { rawText = new TextDecoder(charset).decode(rawBytes); }
+  catch { rawText = new TextDecoder('utf-8').decode(rawBytes); }
+  processCSV();
+}
+
+// ════════════════════════════════════════════════
+// TRAITEMENT CSV
+// ════════════════════════════════════════════════
+function processCSV() {
+  const sep = document.getElementById('separatorSelect').value;
+  const datePref = document.getElementById('dateFormatSelect').value;
+
+  const result = Papa.parse(rawText, {
+    header: true,
+    skipEmptyLines: true,
+    delimiter: sep === 'auto' ? '' : sep,
+  });
+
+  const rawHeaders = result.meta.fields || [];
+  const rows = result.data;
+
+  // 1. Corriger les headers
+  headers = rawHeaders.map(h => fixEnabled ? fixEncoding(h).val : h);
+
+  // 2. Corriger l'encodage des cellules
+  fixCount = 0;
+  const encodedRows = rows.map(row => {
+    const newRow = {};
+    rawHeaders.forEach((rh, i) => {
+      const fh = headers[i];
+      const raw = String(row[rh] ?? '');
+      const { val: fixed, fixed: wasFixed } = fixEnabled ? fixEncoding(raw) : { val: raw, fixed: false };
+      if (wasFixed) fixCount++;
+      newRow[fh] = { orig: raw, val: fixed, fixed: wasFixed };
+    });
+    return newRow;
+  });
+
+  // 3. Inférer les types par colonne
+  colTypes = {};
+  let dateCols = 0, numCols = 0, phoneCols = 0;
+  headers.forEach(h => {
+    const vals = encodedRows.map(r => r[h]?.val ?? '');
+    colTypes[h] = inferColumnType(vals, datePref);
+    if (colTypes[h]==='date'||colTypes[h]==='datetime') dateCols++;
+    if (colTypes[h]==='number') numCols++;
+    if (colTypes[h]==='phone') phoneCols++;
+  });
+
+  // 4. Typer chaque cellule selon le type de colonne
+  processedData = encodedRows.map(row => {
+    const newRow = {};
+    headers.forEach(h => {
+      const cell = row[h];
+      const colType = colTypes[h];
+      let typed;
+      if (colType === 'text' || colType === 'bool') {
+        typed = inferCellType(cell.val, datePref);
+      } else {
+        typed = inferCellType(cell.val, datePref);
+        // Si la colonne est date mais la cellule parse en texte → laisser texte
+      }
+      newRow[h] = { ...cell, typed };
+    });
+    return newRow;
+  });
+
+  showResults(rows.length, result.meta.delimiter, dateCols, numCols, phoneCols);
+}
+
+function showResults(rowCount, delimiter, dateCols, numCols, phoneCols) {
+  document.getElementById('resultsSection').classList.remove('hidden');
+  document.getElementById('dropzone').style.display = 'none';
+
+  const alertBox = document.getElementById('detectionAlert');
+  const msg = document.getElementById('detectionMsg');
+  const parts = [];
+  if (fixCount > 0) parts.push(`✅ ${fixCount} correction(s) d'encodage`);
+  if (dateCols > 0) parts.push(`📅 ${dateCols} colonne(s) date`);
+  if (numCols > 0) parts.push(`🔢 ${numCols} colonne(s) numérique`);
+  if (phoneCols > 0) parts.push(`📞 ${phoneCols} colonne(s) tél/ID protégée(s)`);
+  parts.push(`Encodage : ${detectedEncoding}`);
+  parts.push(`Séparateur : "${delimiter||'auto'}"`);
+
+  alertBox.className = fixCount > 0 ? 'alert alert-success' : 'alert alert-info';
+  msg.textContent = parts.join(' · ');
+
+  document.getElementById('statRows').textContent = rowCount.toLocaleString('fr-FR');
+  document.getElementById('statCols').textContent = headers.length;
+  document.getElementById('statFixed').textContent = fixCount.toLocaleString('fr-FR');
+  document.getElementById('statDates').textContent = dateCols;
+  document.getElementById('statNums').textContent = numCols;
+  document.getElementById('statEncoding').textContent = detectedEncoding.split(' ')[0];
+
+  renderTable();
+}
+
+const TYPE_PILL = {
+  date:     '<span class="type-pill pill-date">📅 Date</span>',
+  datetime: '<span class="type-pill pill-datetime">🕐 DateHeure</span>',
+  number:   '<span class="type-pill pill-num">🔢 Nombre</span>',
+  bool:     '<span class="type-pill pill-bool">✅ Booléen</span>',
+  text:     '<span class="type-pill pill-text">📝 Texte</span>',
+  phone:    '<span class="type-pill pill-phone">📞 Tél/ID</span>',
+};
+
+function renderTable() {
+  const table = document.getElementById('previewTable');
+  const preview = processedData.slice(0, 50);
+
+  let html = '<thead><tr>';
+  for (const h of headers) {
+    const t = colTypes[h] || 'text';
+    html += `<th><div class="th-inner"><span class="th-name">${escHtml(h)}</span>${TYPE_PILL[t]||''}</div></th>`;
+  }
+  html += '</tr></thead><tbody>';
+
+  for (const row of preview) {
+    html += '<tr>';
+    for (const h of headers) {
+      const cell = row[h] || {};
+      const typed = cell.typed || {};
+      const display = typed.display ?? typed.val ?? cell.val ?? '';
+      const typeClass = typed.type ? `type-${typed.type}` : '';
+      const fixClass  = cell.fixed ? 'fixed' : '';
+      const cls = [fixClass, typeClass].filter(Boolean).join(' ');
+
+      if (cell.fixed && cell.orig !== cell.val) {
+        html += `<td class="${cls}" title="Avant correction : ${escHtml(cell.orig)}">
+          <span class="orig">${escHtml(cell.orig)}</span>${escHtml(display)}</td>`;
+      } else {
+        html += `<td class="${cls}">${escHtml(String(display))}</td>`;
+      }
+    }
+    html += '</tr>';
+  }
+  html += '</tbody>';
+  table.innerHTML = html;
+
+  const total = processedData.length;
+  document.getElementById('previewBadge').textContent =
+    total > 50 ? `50 premières lignes sur ${total.toLocaleString('fr-FR')}` : `${total} ligne(s)`;
+}
+
+function escHtml(s) {
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ════════════════════════════════════════════════
+// EXPORT XLSX — types natifs
+// ════════════════════════════════════════════════
+function exportXLSX() {
+  const wb = XLSX.utils.book_new();
+
+  // Construction manuelle de la feuille pour contrôler les types cellule par cellule
+  const ws = {};
+  const range = { s:{r:0,c:0}, e:{r:processedData.length, c:headers.length-1} };
+
+  // En-têtes
+  headers.forEach((h, ci) => {
+    const addr = XLSX.utils.encode_cell({r:0, c:ci});
+    ws[addr] = { t:'s', v:h };
+  });
+
+  // Données
+  processedData.forEach((row, ri) => {
+    headers.forEach((h, ci) => {
+      const addr = XLSX.utils.encode_cell({r: ri+1, c: ci});
+      const cell = row[h] || {};
+      const typed = cell.typed || {};
+
+      let xlCell;
+      switch(typed.type) {
+        case 'date':
+          xlCell = { t:'d', v: typed.val, z: 'dd/mm/yyyy' };
+          break;
+        case 'datetime':
+          xlCell = { t:'d', v: typed.val, z: 'dd/mm/yyyy hh:mm' };
+          break;
+        case 'number':
+          xlCell = { t:'n', v: typed.val };
+          break;
+        case 'bool':
+          xlCell = { t:'b', v: typed.val };
+          break;
+        case 'empty':
+          xlCell = { t:'z', v:'' };
+          break;
+        default:
+          // Forcer texte pur : le préfixe 't' + raw string empêche Excel de réinterpréter
+          xlCell = { t:'s', v: String(cell.val ?? '') };
+          // Si la valeur commence par + ou est un grand entier, ajouter apostrophe pour Excel
+          if (/^\+/.test(String(cell.val??'')) || isTextOnly(String(cell.val??''))) {
+            xlCell.z = '@'; // format texte explicite
+          }
+      }
+      ws[addr] = xlCell;
+    });
+  });
+
+  ws['!ref'] = XLSX.utils.encode_range(range);
+
+  // Largeurs colonnes auto
+  ws['!cols'] = headers.map(h => {
+    const maxLen = Math.max(
+      h.length,
+      ...processedData.slice(0,50).map(r => String(r[h]?.typed?.display ?? r[h]?.val ?? '').length)
+    );
+    return { wch: Math.min(maxLen + 2, 40) };
+  });
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Données corrigées');
+  const baseName = fileName.replace(/\.(csv|txt)$/i, '');
+  XLSX.writeFile(wb, `${baseName}_corrigé.xlsx`);
+}
+
+function exportCSV() {
+  const data = processedData.map(row => {
+    const out = {};
+    for (const h of headers) out[h] = row[h]?.val ?? '';
+    return out;
+  });
+  const csv = Papa.unparse(data, { delimiter: ';' });
+  const blob = new Blob(['\uFEFF'+csv], { type:'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${fileName.replace(/\.(csv|txt)$/i,'')}_corrigé.csv`;
+  a.click();
+}
+
+// ════════════════════════════════════════════════
+// CONTRÔLES
+// ════════════════════════════════════════════════
+function toggleFix() {
+  fixEnabled = !fixEnabled;
+  document.getElementById('fixToggle').classList.toggle('on', fixEnabled);
+  processCSV();
+}
+
+function reprocess() {
+  if (!rawBytes) return;
+  decodeAndProcess();
+}
+
+function resetApp() {
+  document.getElementById('resultsSection').classList.add('hidden');
+  document.getElementById('dropzone').style.display = '';
+  document.getElementById('fileInput').value = '';
+  rawText=''; processedData=[]; headers=[]; rawBytes=null;
+}
+</script>
+</body>
+</html>
